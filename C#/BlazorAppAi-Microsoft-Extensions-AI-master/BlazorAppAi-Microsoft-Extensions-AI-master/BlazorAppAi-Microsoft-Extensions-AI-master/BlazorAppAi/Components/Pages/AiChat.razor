@@ -1,0 +1,187 @@
+﻿@page "/aichat"
+@using BlazorAppAi.Model
+@using BlazorAppAi.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.AI
+@using System.Text
+@using System.Text.RegularExpressions
+@rendermode InteractiveServer
+
+@inject IChatClient ChatClient
+@inject DbContextPost DbContext
+
+<div class="welcome-banner">
+    <h3><strong>Bienvenido al Asistente Médico de Solca</strong></h3>
+    
+</div>
+
+
+<div class="chat-container">
+    <div class="chat-messages" @ref="messagesContainer">
+        @foreach (var message in Messages)
+        {
+            <div class="message-container d-flex mb-2 @(message.IsUser ? "justify-content-end" : "justify-content-start")">
+
+                @if (!message.IsUser) 
+                {
+                    <!-- Bot a la izquierda -->
+                    <img src="images/Bot1.png" alt="Bot" class="message-icon me-2" />
+                }
+
+                <div class="message @(message.IsUser ? "user-message" : "ai-message")">
+                    @((MarkupString)message.Content)
+                </div>
+
+                @if (message.IsUser)
+                {
+                    <!-- Usuario a la derecha -->
+                    <img src="images/Trabajador2.png" alt="Usuario" class="message-icon ms-2" />
+                }
+            </div>
+        }
+    </div>
+
+    <div class="chat-input-area mt-2 d-flex">
+        <input type="text"
+               @bind="userInput"
+               @bind:event="oninput"
+               @onkeyup="HandleKeyUp"
+               placeholder="Escribe tu mensaje..."
+               class="chat-input flex-grow-1 me-2" />
+        <button @onclick="SendMessage"
+                class="send-button"
+                disabled="@isStreaming">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M4 12l8-8 8 8M12 4v16" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </button>
+
+    </div>
+</div>
+@code {
+    private string userInput = string.Empty;
+    private string currentCedula = null; // Guarda la cédula actual
+    private ElementReference messagesContainer;
+    private List<ChatMessageModel> Messages = new();
+    private bool isStreaming = false;
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(userInput) || isStreaming) return;
+
+        // Agregar mensaje del usuario
+        Messages.Add(new ChatMessageModel { Content = userInput, IsUser = true });
+        var userPregunta = userInput;
+        userInput = string.Empty;
+
+        // Preparar contenedor para la respuesta de la IA
+        var aiResponse = new StringBuilder();
+        Messages.Add(new ChatMessageModel { Content = "", IsUser = false });
+
+        try
+        {
+            isStreaming = true;
+
+            // Extraer cédula si hay en el mensaje
+            var cedulaMatch = Regex.Match(userPregunta, @"\b\d{8,13}\b");
+
+            if (cedulaMatch.Success)
+            {
+                currentCedula = cedulaMatch.Value; // Guardar la cédula para futuras preguntas
+            }
+
+            // Usar cédula actual si no se especifica
+            string cedulaParaConsulta = currentCedula;
+            string prompt;
+
+            if (!string.IsNullOrEmpty(cedulaParaConsulta))
+            {
+                // Consultar últimos registros del paciente
+                var registros = await DbContext.FactMnPacientesInyectados
+                    .Where(p => p.DmCedulaId == cedulaParaConsulta)
+                    .Join(DbContext.Ciclos,
+                        paciente => paciente.DmCycleId,
+                        ciclo => ciclo.Id,
+                        (paciente, ciclo) => new
+                        {
+                            paciente.DmCycleId,
+                            paciente.DmFechaNacimiento,
+                            paciente.DmSexoId,
+                            paciente.DmPeso,
+                            paciente.DmAltura,
+                            paciente.DmHoraPreparacion,
+                            paciente.DmTiempoRequerido,
+                            paciente.DmActividadRequerida,
+                            paciente.DmActividadDispensada,
+                            paciente.DmActividadAdministrada,
+                            paciente.DmDesviacionPorcentaje,
+                            FechaInyeccion = ciclo.CreationDate
+                        })
+                    .OrderByDescending(p => p.DmCycleId)
+                    .Take(5)
+                    .ToListAsync();
+
+                // Construir el contexto para la IA
+                var contexto = new StringBuilder();
+                contexto.AppendLine($"Registros del paciente con cédula {cedulaParaConsulta}:\n");
+
+                foreach (var r in registros)
+                {
+                    contexto.AppendLine(
+                        $"Ciclo: {r.DmCycleId}, Fecha inyección: {r.FechaInyeccion:yyyy-MM-dd}, " +
+                        $"Nacimiento: {r.DmFechaNacimiento?.ToString("yyyy-MM-dd") ?? "N/A"}, " +
+                        $"Sexo: {r.DmSexoId}, Peso: {r.DmPeso}, Altura: {r.DmAltura}, " +
+                        $"Hora preparación: {r.DmHoraPreparacion ?? "N/A"}, Hora administrado: {r.DmTiempoRequerido ?? "N/A"}, " +
+                        $"Dosis requerida: {(r.DmActividadRequerida.HasValue ? r.DmActividadRequerida.Value.ToString("0.00") + " mCi" : "N/A")}, " +
+                        $"Dosis dispensada: {(r.DmActividadDispensada.HasValue ? r.DmActividadDispensada.Value.ToString("0.00") + " mCi" : "N/A")}, " +
+                        $"Dosis administrada: {(r.DmActividadAdministrada.HasValue ? r.DmActividadAdministrada.Value.ToString("0.00") + " mCi" : "N/A")}, " +
+                        $"Desviación: {r.DmDesviacionPorcentaje ?? "N/A"}%"
+                    );
+                }
+
+                contexto.AppendLine($"\nPregunta del usuario: {userPregunta}");
+                prompt = contexto.ToString();
+            }
+            else
+            {
+                // Si no hay cédula y no se ha ingresado nunca
+                prompt = userPregunta;
+            }
+
+            // Enviar prompt a la IA usando streaming
+            await foreach (var chunk in ChatClient.GetStreamingResponseAsync(new ChatMessage[] {
+            new ChatMessage(ChatRole.User, prompt)
+        }))
+            {
+                if (chunk.Text != null)
+                {
+                    aiResponse.Append(chunk.Text);
+                    Messages[^1].Content = aiResponse.ToString();
+                    await InvokeAsync(StateHasChanged);
+                    await ScrollToBottom();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Messages[^1].Content = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isStreaming = false;
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        await JSRuntime.InvokeVoidAsync("scrollToBottom", messagesContainer);
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SendMessage();
+    }
+
+    [Inject] private IJSRuntime JSRuntime { get; set; }
+
+}

@@ -1,0 +1,10 @@
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\bin\Debug\SerpeintesEscaleras.exe.config
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\bin\Debug\SerpeintesEscaleras.exe
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\bin\Debug\SerpeintesEscaleras.pdb
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.csproj.AssemblyReference.cache
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.Form1.resources
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.Properties.Resources.resources
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.csproj.GenerateResource.cache
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.csproj.CoreCompileInputs.cache
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.exe
+C:\Users\anths\source\repos\SerpeintesEscaleras\SerpeintesEscaleras\obj\Debug\SerpeintesEscaleras.pdb
